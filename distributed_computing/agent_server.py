@@ -15,44 +15,64 @@
 import os
 import sys
 sys.path.append(os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'kinematics'))
+import json as json
+from threading import Thread
 
 from inverse_kinematics import InverseKinematicsAgent
-
+from xmlrpc.server import SimpleXMLRPCServer
 
 class ServerAgent(InverseKinematicsAgent):
-    '''ServerAgent provides RPC service
-    '''
-    # YOUR CODE HERE
-    
+    '''ServerAgent provides RPC service'''
+
+    def __init__(self):
+        super(ServerAgent, self).__init__()
+        self.server = SimpleXMLRPCServer(("localhost", 9999), allow_none=True, logRequests=False)
+
+        methods = [
+            "get_angle",
+            "set_angle",
+            "get_posture",
+            "execute_keyframes",
+            "get_transform",
+            "set_transform"
+        ]
+        for method in methods:
+            self.server.register_function(getattr(self, method), method)
+
+        thread = Thread(target=self.server.serve_forever)
+        thread.daemon = True
+        thread.start()
+        print("Started RPC ServerAgent on http://localhost:9999")
+
     def get_angle(self, joint_name):
-        '''get sensor value of given joint'''
-        # YOUR CODE HERE
-    
+        print(f"[RPC] get_angle({joint_name})")
+        return self.perception.joint[joint_name]
+
     def set_angle(self, joint_name, angle):
-        '''set target angle of joint for PID controller
-        '''
-        # YOUR CODE HERE
+        print(f"[RPC] set_angle({joint_name}, {angle})")
+        self.target_joints[joint_name] = angle
+        return True
 
     def get_posture(self):
-        '''return current posture of robot'''
-        # YOUR CODE HERE
+        print("[RPC] get_posture()")
+        return self.posture
 
     def execute_keyframes(self, keyframes):
-        '''excute keyframes, note this function is blocking call,
-        e.g. return until keyframes are executed
-        '''
-        # YOUR CODE HERE
+        print("[RPC] execute_keyframes(...)")
+        self.start_time = None
+        self.keyframes = keyframes
+        return True
 
     def get_transform(self, name):
-        '''get transform with given name
-        '''
-        # YOUR CODE HERE
+        print(f"[RPC] get_transform({name})")
+        return json.dumps(self.transforms[name].tolist())
 
     def set_transform(self, effector_name, transform):
-        '''solve the inverse kinematics and control joints use the results
-        '''
-        # YOUR CODE HERE
-
+        print(f"[RPC] set_transform({effector_name}, transform)")
+        self.target_joints = self.inverse_kinematics(effector_name, json.loads(transform))
+        return True
+    
+    
 if __name__ == '__main__':
     agent = ServerAgent()
     agent.run()
